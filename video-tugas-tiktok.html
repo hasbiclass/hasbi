@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Video Tugas</title>
+  <style>
+    [hidden] { display: none !important; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      background: #000;
+      color: #fff;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      overflow: hidden;
+    }
+
+    .app {
+      position: relative;
+      width: 100%;
+      max-width: 420px;
+      height: 100%;
+      margin: 0 auto;
+      background: #111;
+      overflow: hidden;
+    }
+
+    /* Feed vertikal ala TikTok */
+    .feed {
+      position: absolute;
+      inset: 0;
+      overflow-y: auto;
+      scroll-snap-type: y mandatory;
+      scrollbar-width: none;
+    }
+    .feed::-webkit-scrollbar { display: none; }
+
+    .item {
+      position: relative;
+      height: 100%;
+      scroll-snap-align: start;
+      overflow: hidden;
+      background: #000;
+    }
+
+    .video {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      cursor: pointer;
+    }
+
+    .item::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 40%;
+      background: linear-gradient(transparent, rgba(0, 0, 0, 0.65));
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .play-indicator {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+      z-index: 2;
+    }
+    .play-indicator::before {
+      content: "";
+      margin-left: 6px;
+      border-left: 22px solid #fff;
+      border-top: 13px solid transparent;
+      border-bottom: 13px solid transparent;
+    }
+    .item.paused .play-indicator { opacity: 1; }
+
+    .info {
+      position: absolute;
+      left: 16px;
+      right: 88px;
+      bottom: 28px;
+      z-index: 2;
+      pointer-events: none;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+    }
+    .username { font-weight: 700; font-size: 16px; margin-bottom: 6px; }
+    .caption { font-size: 14px; line-height: 1.4; }
+
+    /* Tombol aksi: like, favorit, share */
+    .actions {
+      position: absolute;
+      right: 12px;
+      bottom: 40px;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+    .act {
+      background: none;
+      border: none;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.15s;
+    }
+    .act:active { transform: scale(0.88); }
+    .act svg {
+      width: 34px;
+      height: 34px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+    }
+    .act.like.active { color: #fe2c55; }
+    .act.fav.active { color: #facc15; }
+    .act.like.active svg,
+    .act.fav.active svg { fill: currentColor; }
+    .count { text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5); }
+
+    /* Tombol upload & layar kosong */
+    .top-bar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 10;
+      display: flex;
+      justify-content: flex-end;
+      padding: 14px 16px;
+      pointer-events: none;
+    }
+    .btn {
+      pointer-events: auto;
+      border: none;
+      border-radius: 999px;
+      padding: 9px 16px;
+      background: #fe2c55;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .btn:hover { filter: brightness(1.08); }
+
+    .empty {
+      position: absolute;
+      inset: 0;
+      z-index: 5;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 24px;
+      text-align: center;
+      color: #aaa;
+    }
+    .empty h2 { color: #fff; font-size: 20px; }
+    .empty .btn { margin-top: 16px; padding: 12px 24px; font-size: 16px; }
+
+    .toast {
+      position: fixed;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 50;
+      max-width: 90%;
+      padding: 10px 16px;
+      border-radius: 10px;
+      background: rgba(0, 0, 0, 0.85);
+      color: #fff;
+      font-size: 14px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="feed" id="feed"></div>
+
+    <div class="empty" id="empty">
+      <h2>Belum ada video</h2>
+      <p>Upload video tugasmu untuk mulai menontonnya.</p>
+      <button class="btn" id="emptyUploadBtn">+ Upload Video</button>
+    </div>
+
+    <div class="top-bar">
+      <button class="btn" id="uploadBtn">+ Upload</button>
+    </div>
+
+    <input type="file" id="fileInput" accept="video/*" hidden>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <template id="itemTpl">
+    <section class="item">
+      <video class="video" loop playsinline></video>
+      <div class="play-indicator"></div>
+
+      <div class="info">
+        <div class="username"></div>
+        <div class="caption"></div>
+      </div>
+
+      <div class="actions">
+        <button class="act like">
+          <svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.5-9.1C1 8.8 3 5 6.8 5c2.1 0 3.6 1.2 5.2 3 1.6-1.8 3.1-3 5.2-3C21 5 23 8.8 21.5 11.9 19.5 16.4 12 21 12 21z"/></svg>
+          <span class="count">0</span>
+        </button>
+        <button class="act fav">
+          <svg viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4z"/></svg>
+          <span class="count">0</span>
+        </button>
+        <button class="act share">
+          <svg viewBox="0 0 24 24"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M16 6l-4-4-4 4M12 2v13"/></svg>
+          <span class="count">0</span>
+        </button>
+      </div>
+    </section>
+  </template>
+
+  <script>
+    // ===================== KONFIGURASI =====================
+    const CONFIG = {
+      maxSizeMB: 200            // batas ukuran video upload manual (MB)
+    };
+
+    // Angka default untuk video yang tidak diisi lengkap
+    const DEFAULT_STATS = {
+      username: "@namaanda",
+      caption: "Tugas saya #tugaskuliah",
+      likes: 1240,
+      favorites: 56,
+      shares: 12
+    };
+
+    // Daftar video yang tampil otomatis saat halaman dibuka.
+    // src        : nama file video. Letakkan file di folder yang sama dengan file HTML ini
+    //              (atau tulis path-nya, mis. "videos/hasbi.mp4")
+    // username, caption, likes, favorites, shares : boleh diubah atau dihapus (akan pakai DEFAULT_STATS)
+    const VIDEOS = [
+      { src: "hasbi.mp4", username: "@hasbi", caption: "Tell me about yourself", likes: 5400000, favorites: 320000, shares: 8700 }
+      // Tambah video lain dengan menambah baris, contoh:
+      // { src: "Budi.mp4", caption: "Demo aplikasi kelompok", likes: 980, favorites: 45, shares: 9 }
+    ];
+    // =======================================================
+
+    const $ = id => document.getElementById(id);
+    const feed = $("feed");
+    const empty = $("empty");
+    const fileInput = $("fileInput");
+    const toast = $("toast");
+    const tpl = $("itemTpl");
+
+    let toastTimer;
+
+    function showToast(text) {
+      toast.textContent = text;
+      toast.hidden = false;
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { toast.hidden = true; }, 2200);
+    }
+
+    // Format angka ala TikTok: 1240 -> 1.2 rb, 5400000 -> 5.4 jt
+    function formatCount(n) {
+      if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, "") + " jt";
+      if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + " rb";
+      return String(n);
+    }
+
+    // Putar video saat terlihat di layar, jeda saat di-scroll pergi
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(({ target, isIntersecting, intersectionRatio }) => {
+        const video = target.querySelector("video");
+        if (isIntersecting && intersectionRatio >= 0.6) {
+          video.play().catch(() => target.classList.add("paused"));
+        } else {
+          video.pause();
+        }
+      });
+    }, { threshold: [0, 0.6] });
+
+    // item: { src, stats, file? }  -- file hanya ada untuk video hasil upload
+    function addVideo({ src, stats, file = null }, scroll = true) {
+      const node = tpl.content.firstElementChild.cloneNode(true);
+      const video = node.querySelector("video");
+      video.src = src;
+      node.querySelector(".username").textContent = stats.username;
+      node.querySelector(".caption").textContent = stats.caption;
+
+      const likeBtn = node.querySelector(".like");
+      const favBtn = node.querySelector(".fav");
+      const shareBtn = node.querySelector(".share");
+      const counts = { like: stats.likes, fav: stats.favorites, share: stats.shares };
+      const active = { like: false, fav: false };
+
+      const render = () => {
+        likeBtn.querySelector(".count").textContent = formatCount(counts.like);
+        favBtn.querySelector(".count").textContent = formatCount(counts.fav);
+        shareBtn.querySelector(".count").textContent = formatCount(counts.share);
+        likeBtn.classList.toggle("active", active.like);
+        favBtn.classList.toggle("active", active.fav);
+      };
+
+      likeBtn.addEventListener("click", () => {
+        active.like = !active.like;
+        counts.like += active.like ? 1 : -1;
+        render();
+      });
+
+      favBtn.addEventListener("click", () => {
+        active.fav = !active.fav;
+        counts.fav += active.fav ? 1 : -1;
+        render();
+      });
+
+      shareBtn.addEventListener("click", async () => {
+        const data = { title: stats.caption, text: `${stats.username} - ${stats.caption}` };
+        try {
+          if (navigator.share) {
+            if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+              data.files = [file];
+            }
+            await navigator.share(data);
+          } else {
+            await navigator.clipboard.writeText(data.text);
+            showToast("Teks video disalin");
+          }
+          counts.share++;
+          render();
+        } catch (err) {
+          if (err.name !== "AbortError") showToast("Gagal membagikan video");
+        }
+      });
+
+      // Tap video untuk play / pause
+      video.addEventListener("click", () => {
+        if (video.paused) {
+          video.play().catch(() => {});
+        } else {
+          video.pause();
+        }
+      });
+      video.addEventListener("play", () => node.classList.remove("paused"));
+      video.addEventListener("pause", () => node.classList.add("paused"));
+
+      // Beri tahu jika file video dari kode tidak ditemukan
+      video.addEventListener("error", () => {
+        if (!file) {
+          showToast(`Video "${src}" tidak ditemukan. Pastikan nama dan lokasi file sudah benar.`);
+        }
+      });
+
+      render();
+      feed.appendChild(node);
+      observer.observe(node);
+      empty.hidden = true;
+      if (scroll) feed.scrollTo({ top: node.offsetTop, behavior: "smooth" });
+    }
+
+    // Muat video dari daftar VIDEOS saat halaman dibuka
+    VIDEOS.forEach(v => {
+      addVideo({ src: v.src, stats: { ...DEFAULT_STATS, ...v } }, false);
+    });
+
+    // Upload manual dari perangkat
+    function openPicker() {
+      fileInput.click();
+    }
+
+    $("uploadBtn").addEventListener("click", openPicker);
+    $("emptyUploadBtn").addEventListener("click", openPicker);
+
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files[0];
+      fileInput.value = "";
+      if (!file) return;
+
+      const isVideo = file.type.startsWith("video/") || /\.(mp4|webm|mov)$/i.test(file.name);
+      if (!isVideo) {
+        showToast("File harus berupa video");
+        return;
+      }
+      if (file.size > CONFIG.maxSizeMB * 1024 * 1024) {
+        showToast(`Ukuran maksimal ${CONFIG.maxSizeMB} MB`);
+        return;
+      }
+      addVideo({
+        src: URL.createObjectURL(file),
+        stats: { ...DEFAULT_STATS },
+        file
+      });
+    });
+  </script>
+</body>
+</html>
